@@ -23,7 +23,7 @@ export async function getBanks(): Promise<Bank[]> {
 
 export async function getExpenses(): Promise<Expense[]> {
   const rows = (await sql`
-    SELECT id, bank_id, amount, category, description, date, created_at
+    SELECT id, bank_id, amount, category, description, TO_CHAR(date, 'YYYY-MM-DD') as date, created_at
     FROM expenses
     ORDER BY date DESC, created_at DESC
   `) as {
@@ -71,14 +71,103 @@ export async function deleteBank(id: string): Promise<void> {
   await sql`DELETE FROM banks WHERE id = ${id}`;
 }
 
+export interface Deposit {
+  id: string;
+  bankId: string;
+  amount: number;
+  note: string;
+  date: string;
+  createdAt: string;
+}
+
 export async function addMoney(
   bankId: string,
-  amount: number
+  amount: number,
+  note: string,
+  date: string
 ): Promise<void> {
+  const id = Math.random().toString(36).slice(2, 10);
+  await sql`
+    INSERT INTO deposits (id, bank_id, amount, note, date, created_at)
+    VALUES (${id}, ${bankId}, ${amount}, ${note}, ${date}, NOW())
+  `;
   await sql`
     UPDATE banks SET balance = balance + ${amount}
     WHERE id = ${bankId}
   `;
+}
+
+export interface BankHistoryItem {
+  id: string;
+  bankId: string;
+  type: "credit" | "debit";
+  amount: number;
+  description: string;
+  date: string;
+  createdAt: string;
+}
+
+export async function getBankHistory(
+  bankId: string,
+  dateFrom?: string,
+  dateTo?: string
+): Promise<BankHistoryItem[]> {
+  const deposits = (await sql`
+    SELECT id, bank_id, amount, note, TO_CHAR(date, 'YYYY-MM-DD') as date, created_at
+    FROM deposits
+    WHERE bank_id = ${bankId}
+      AND (${dateFrom}::text IS NULL OR date >= ${dateFrom}::date)
+      AND (${dateTo}::text IS NULL OR date <= ${dateTo}::date)
+  `) as {
+    id: string;
+    bank_id: string;
+    amount: number;
+    note: string;
+    date: string;
+    created_at: string;
+  }[];
+
+  const expenses = (await sql`
+    SELECT id, bank_id, amount, description, TO_CHAR(date, 'YYYY-MM-DD') as date, created_at
+    FROM expenses
+    WHERE bank_id = ${bankId}
+      AND (${dateFrom}::text IS NULL OR date >= ${dateFrom}::date)
+      AND (${dateTo}::text IS NULL OR date <= ${dateTo}::date)
+  `) as {
+    id: string;
+    bank_id: string;
+    amount: number;
+    description: string;
+    date: string;
+    created_at: string;
+  }[];
+
+  const items: BankHistoryItem[] = [
+    ...deposits.map((d) => ({
+      id: d.id,
+      bankId: d.bank_id,
+      type: "credit" as const,
+      amount: Number(d.amount),
+      description: d.note || "Money added",
+      date: d.date,
+      createdAt: d.created_at,
+    })),
+    ...expenses.map((e) => ({
+      id: e.id,
+      bankId: e.bank_id,
+      type: "debit" as const,
+      amount: Number(e.amount),
+      description: e.description,
+      date: e.date,
+      createdAt: e.created_at,
+    })),
+  ];
+
+  return items.sort(
+    (a, b) =>
+      new Date(b.date).getTime() - new Date(a.date).getTime() ||
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
 }
 
 export async function addExpense(expense: Expense): Promise<void> {

@@ -8,6 +8,7 @@ import {
   Building2,
   Check,
   CreditCard,
+  History,
   Loader2,
   Lock,
   Pencil,
@@ -43,6 +44,8 @@ import {
   addExpense as addExpenseAction,
   deleteExpense as deleteExpenseAction,
   verifyPassword,
+  getBankHistory,
+  type BankHistoryItem,
 } from "@/app/actions";
 
 export interface Bank {
@@ -122,6 +125,12 @@ export default function ExpenseTracker() {
   );
   const [editingBankId, setEditingBankId] = useState<string | null>(null);
 
+  // Bank history state
+  const [historyBankId, setHistoryBankId] = useState<string | null>(null);
+  const [historyItems, setHistoryItems] = useState<BankHistoryItem[]>([]);
+  const [historyDateFrom, setHistoryDateFrom] = useState("");
+  const [historyDateTo, setHistoryDateTo] = useState("");
+
   // Bank form
   const [bankName, setBankName] = useState("");
   const [bankBalance, setBankBalance] = useState("");
@@ -130,6 +139,9 @@ export default function ExpenseTracker() {
   const [moneyBankId, setMoneyBankId] = useState("");
   const [moneyAmount, setMoneyAmount] = useState("");
   const [moneyNote, setMoneyNote] = useState("");
+  const [moneyDate, setMoneyDate] = useState(
+    new Date().toISOString().split("T")[0]
+  );
 
   // Add expense form
   const [expenseDescription, setExpenseDescription] = useState("");
@@ -295,14 +307,39 @@ export default function ExpenseTracker() {
 
     setLoading(true);
     try {
-      await addMoneyAction(moneyBankId, amount);
+      await addMoneyAction(moneyBankId, amount, moneyNote, moneyDate);
       await loadData();
       setMoneyAmount("");
       setMoneyNote("");
+      setMoneyDate(new Date().toISOString().split("T")[0]);
       closeModal();
     } finally {
       setLoading(false);
     }
+  }
+
+  async function openHistory(bankId: string) {
+    setHistoryBankId(bankId);
+    setHistoryDateFrom("");
+    setHistoryDateTo("");
+    await loadHistory(bankId);
+  }
+
+  async function loadHistory(bankId: string, from?: string, to?: string) {
+    setLoading(true);
+    try {
+      const items = await getBankHistory(bankId, from, to);
+      setHistoryItems(items);
+    } catch (err) {
+      console.error("Failed to load bank history:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function closeHistory() {
+    setHistoryBankId(null);
+    setHistoryItems([]);
   }
 
   async function handleAddExpense(e: React.FormEvent) {
@@ -374,7 +411,7 @@ export default function ExpenseTracker() {
   const groupedExpenses = useMemo(() => {
     const groups = new Map<string, Expense[]>();
     filteredExpenses.forEach((e) => {
-      const key = e.date;
+      const key = String(e.date).slice(0, 10);
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(e);
     });
@@ -543,6 +580,16 @@ export default function ExpenseTracker() {
                       </p>
                     </div>
                     <div className="ml-2 flex items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openHistory(bank.id);
+                        }}
+                        className="rounded-lg p-1.5 text-muted transition-colors hover:bg-accent/10 hover:text-accent"
+                        aria-label="Bank history"
+                      >
+                        <History className="h-3.5 w-3.5" />
+                      </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -870,15 +917,25 @@ export default function ExpenseTracker() {
                     className="form-input"
                   />
                 </Input>
-                <Input label="Note (optional)">
-                  <input
-                    type="text"
-                    placeholder="e.g. Invoice payment"
-                    value={moneyNote}
-                    onChange={(e) => setMoneyNote(e.target.value)}
-                    className="form-input"
-                  />
-                </Input>
+                <div className="grid grid-cols-2 gap-3">
+                  <Input label="Date">
+                    <input
+                      type="date"
+                      value={moneyDate}
+                      onChange={(e) => setMoneyDate(e.target.value)}
+                      className="form-input"
+                    />
+                  </Input>
+                  <Input label="Note (optional)">
+                    <input
+                      type="text"
+                      placeholder="e.g. Invoice payment"
+                      value={moneyNote}
+                      onChange={(e) => setMoneyNote(e.target.value)}
+                      className="form-input"
+                    />
+                  </Input>
+                </div>
                 <button
                   type="submit"
                   disabled={!moneyAmount || banks.length === 0 || loading}
@@ -945,6 +1002,106 @@ export default function ExpenseTracker() {
                 </button>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Bank History Modal */}
+      {historyBankId && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-6"
+          onClick={(e) => {
+            if (e.currentTarget === e.target) closeHistory();
+          }}
+        >
+          <div className="flex h-[85vh] w-full max-w-2xl flex-col rounded-t-3xl bg-card p-6 shadow-2xl sm:h-auto sm:max-h-[85vh] sm:rounded-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">
+                  Bank History
+                </h2>
+                <p className="text-sm text-muted">
+                  {banks.find((b) => b.id === historyBankId)?.name}
+                </p>
+              </div>
+              <button
+                onClick={closeHistory}
+                className="rounded-lg p-2 text-muted hover:bg-input"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mb-4 flex items-center gap-2">
+              <input
+                type="date"
+                value={historyDateFrom}
+                onChange={(e) => {
+                  setHistoryDateFrom(e.target.value);
+                  if (historyBankId) {
+                    loadHistory(
+                      historyBankId,
+                      e.target.value,
+                      historyDateTo
+                    );
+                  }
+                }}
+                className="form-input h-9 px-3 py-0 text-xs"
+              />
+              <span className="text-xs text-muted">to</span>
+              <input
+                type="date"
+                value={historyDateTo}
+                onChange={(e) => {
+                  setHistoryDateTo(e.target.value);
+                  if (historyBankId) {
+                    loadHistory(
+                      historyBankId,
+                      historyDateFrom,
+                      e.target.value
+                    );
+                  }
+                }}
+                className="form-input h-9 px-3 py-0 text-xs"
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-1">
+              {historyItems.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-border p-8 text-center">
+                  <p className="text-muted">No history found.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {historyItems.map((item) => (
+                    <div
+                      key={`${item.type}-${item.id}`}
+                      className="flex items-center justify-between rounded-xl border border-border bg-input/30 p-3"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-card-foreground">
+                          {item.description}
+                        </p>
+                        <p className="text-xs text-muted">
+                          {formatDate(item.date)} ·{" "}
+                          {item.type === "credit" ? "Money Added" : "Expense"}
+                        </p>
+                      </div>
+                      <p
+                        className={`text-sm font-semibold ${
+                          item.type === "credit"
+                            ? "text-success"
+                            : "text-danger"
+                        }`}
+                      >
+                        {item.type === "credit" ? "+" : "-"}
+                        {formatCurrency(item.amount)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

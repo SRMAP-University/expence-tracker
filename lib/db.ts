@@ -33,6 +33,17 @@ export async function initDb() {
       value TEXT NOT NULL
     );
   `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS deposits (
+      id TEXT PRIMARY KEY,
+      bank_id TEXT NOT NULL REFERENCES banks(id) ON DELETE CASCADE,
+      amount NUMERIC(12, 2) NOT NULL,
+      note TEXT,
+      date DATE NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `;
 }
 
 export interface BankRow {
