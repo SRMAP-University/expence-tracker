@@ -33,8 +33,7 @@ import {
   YAxis,
 } from "recharts";
 import {
-  setupDatabase,
-  seedDefaultPassword,
+  initAuth,
   getBanks,
   getExpenses,
   addBank as addBankAction,
@@ -43,7 +42,6 @@ import {
   addMoney as addMoneyAction,
   addExpense as addExpenseAction,
   deleteExpense as deleteExpenseAction,
-  hasPassword,
   verifyPassword,
 } from "@/app/actions";
 
@@ -113,7 +111,6 @@ export default function ExpenseTracker() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
 
   // Auth state
-  const [checkingAuth, setCheckingAuth] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
@@ -164,13 +161,8 @@ export default function ExpenseTracker() {
 
   async function initApp() {
     try {
-      await setupDatabase();
-      await seedDefaultPassword();
-      const locked = await hasPassword();
-      if (!locked) {
-        setIsAuthenticated(true);
-        await loadData();
-      } else if (localStorage.getItem(AUTH_KEY) === "true") {
+      const { needsPassword } = await initAuth();
+      if (!needsPassword || localStorage.getItem(AUTH_KEY) === "true") {
         setIsAuthenticated(true);
         await loadData();
       }
@@ -179,7 +171,7 @@ export default function ExpenseTracker() {
       window.alert("Could not connect to the database.");
     } finally {
       setMounted(true);
-      setCheckingAuth(false);
+      setLoading(false);
     }
   }
 
@@ -249,6 +241,9 @@ export default function ExpenseTracker() {
       } else {
         setAuthError("Incorrect password");
       }
+    } catch (err) {
+      console.error("Unlock failed:", err);
+      setAuthError("Could not verify password. Please try again.");
     } finally {
       setLoading(false);
     }

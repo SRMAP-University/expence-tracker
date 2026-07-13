@@ -124,11 +124,11 @@ export async function verifyPassword(password: string): Promise<boolean> {
     SELECT value FROM app_settings WHERE key = ${PASSWORD_KEY}
   `) as { value: string }[];
   if (rows.length === 0) return true;
-  return bcrypt.compareSync(password, rows[0].value);
+  return bcrypt.compare(password, rows[0].value);
 }
 
 export async function setPassword(password: string): Promise<void> {
-  const hash = bcrypt.hashSync(password, 10);
+  const hash = await bcrypt.hash(password, 10);
   await sql`
     INSERT INTO app_settings (key, value)
     VALUES (${PASSWORD_KEY}, ${hash})
@@ -144,4 +144,11 @@ export async function seedDefaultPassword(): Promise<void> {
       await setPassword(password);
     }
   }
+}
+
+export async function initAuth(): Promise<{ needsPassword: boolean }> {
+  await initDb();
+  await seedDefaultPassword();
+  const locked = await hasPassword();
+  return { needsPassword: locked };
 }
