@@ -9,6 +9,7 @@ import {
   Check,
   CreditCard,
   Loader2,
+  Lock,
   Pencil,
   PieChart as PieChartIcon,
   Plus,
@@ -33,6 +34,7 @@ import {
 } from "recharts";
 import {
   setupDatabase,
+  seedDefaultPassword,
   getBanks,
   getExpenses,
   addBank as addBankAction,
@@ -41,6 +43,8 @@ import {
   addMoney as addMoneyAction,
   addExpense as addExpenseAction,
   deleteExpense as deleteExpenseAction,
+  hasPassword,
+  verifyPassword,
 } from "@/app/actions";
 
 export interface Bank {
@@ -108,6 +112,12 @@ export default function ExpenseTracker() {
   const [banks, setBanks] = useState<Bank[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
 
+  // Auth state
+  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [authError, setAuthError] = useState<string | null>(null);
+
   // Modal state
   const [showModal, setShowModal] = useState(false);
   const [modalTab, setModalTab] = useState<"expense" | "money" | "bank">(
@@ -150,9 +160,31 @@ export default function ExpenseTracker() {
     }
   }
 
+  const AUTH_KEY = "expense-tracker-auth";
+
+  async function initApp() {
+    try {
+      await setupDatabase();
+      await seedDefaultPassword();
+      const locked = await hasPassword();
+      if (!locked) {
+        setIsAuthenticated(true);
+        await loadData();
+      } else if (localStorage.getItem(AUTH_KEY) === "true") {
+        setIsAuthenticated(true);
+        await loadData();
+      }
+    } catch (err) {
+      console.error("Failed to initialize app:", err);
+      window.alert("Could not connect to the database.");
+    } finally {
+      setMounted(true);
+      setCheckingAuth(false);
+    }
+  }
+
   useEffect(() => {
-    setMounted(true);
-    setupDatabase().then(loadData);
+    initApp();
   }, []);
 
   useEffect(() => {
@@ -176,8 +208,8 @@ export default function ExpenseTracker() {
     [expenses]
   );
 
-  const remainingBalance = useMemo(
-    () => totalBalance - totalExpenses,
+  const totalDeposited = useMemo(
+    () => totalBalance + totalExpenses,
     [totalBalance, totalExpenses]
   );
 
@@ -202,6 +234,24 @@ export default function ExpenseTracker() {
     setEditingBankId(null);
     setBankName("");
     setBankBalance("");
+  }
+
+  async function handleUnlock(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setAuthError(null);
+    try {
+      const valid = await verifyPassword(passwordInput);
+      if (valid) {
+        setIsAuthenticated(true);
+        localStorage.setItem(AUTH_KEY, "true");
+        await loadData();
+      } else {
+        setAuthError("Incorrect password");
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleBankSubmit(e: React.FormEvent) {
@@ -327,6 +377,52 @@ export default function ExpenseTracker() {
 
   if (!mounted) return null;
 
+  if (!isAuthenticated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-8 shadow-lg">
+          <div className="mb-6 flex flex-col items-center text-center">
+            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-input text-accent">
+              <Lock className="h-7 w-7" />
+            </div>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+              Expense Tracker
+            </h1>
+            <p className="mt-1 text-sm text-muted">
+              Enter the password to continue
+            </p>
+          </div>
+
+          <form onSubmit={handleUnlock} className="space-y-4">
+            <input
+              type="password"
+              placeholder="Password"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              className="form-input"
+              autoFocus
+            />
+            {authError && (
+              <p className="text-center text-sm text-danger">{authError}</p>
+            )}
+            <button
+              type="submit"
+              disabled={!passwordInput || loading}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-foreground px-4 py-3 text-sm font-medium text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Lock className="h-4 w-4" />
+              )}
+              Unlock
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <main className="relative min-h-screen bg-background px-4 pb-28 pt-8 sm:px-6 lg:px-8">
       {loading && (
@@ -369,8 +465,8 @@ export default function ExpenseTracker() {
             tone="danger"
           />
           <MiniStat
-            label="Remaining"
-            value={formatCurrency(remainingBalance)}
+            label="Deposited"
+            value={formatCurrency(totalDeposited)}
             icon={<Banknote className="h-4 w-4 text-success" />}
             tone="success"
           />
