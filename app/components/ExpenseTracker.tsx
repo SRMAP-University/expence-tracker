@@ -143,6 +143,8 @@ export default function ExpenseTracker() {
   // Filter states
   const [searchQuery, setSearchQuery] = useState("");
   const [filterBankId, setFilterBankId] = useState<string | null>(null);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   async function loadData() {
     try {
@@ -355,6 +357,11 @@ export default function ExpenseTracker() {
   const filteredExpenses = useMemo(() => {
     return expenses
       .filter((e) => (filterBankId ? e.bankId === filterBankId : true))
+      .filter((e) => {
+        if (dateFrom && e.date < dateFrom) return false;
+        if (dateTo && e.date > dateTo) return false;
+        return true;
+      })
       .filter(
         (e) =>
           searchQuery.trim() === "" ||
@@ -362,7 +369,19 @@ export default function ExpenseTracker() {
           e.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
           formatDate(e.date).toLowerCase().includes(searchQuery.toLowerCase())
       );
-  }, [expenses, filterBankId, searchQuery]);
+  }, [expenses, filterBankId, searchQuery, dateFrom, dateTo]);
+
+  const groupedExpenses = useMemo(() => {
+    const groups = new Map<string, Expense[]>();
+    filteredExpenses.forEach((e) => {
+      const key = e.date;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(e);
+    });
+    return Array.from(groups.entries()).sort(
+      (a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime()
+    );
+  }, [filteredExpenses]);
 
   const bankMap = useMemo(() => {
     const map = new Map<string, Bank>();
@@ -496,7 +515,7 @@ export default function ExpenseTracker() {
               <p className="text-sm text-muted">Add your first bank</p>
             </button>
           ) : (
-            <div className="flex gap-3 overflow-x-auto pb-2">
+            <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
               {banks.map((bank) => (
                 <div
                   key={bank.id}
@@ -577,7 +596,7 @@ export default function ExpenseTracker() {
 
         {/* Transactions */}
         <section>
-          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <h2 className="text-base font-semibold text-foreground">
               Transactions
               {filterBankId && bankMap.has(filterBankId) && (
@@ -586,90 +605,99 @@ export default function ExpenseTracker() {
                 </span>
               )}
             </h2>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-              <input
-                type="text"
-                placeholder="Search..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-xl border border-border bg-input py-2 pl-9 pr-4 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 sm:w-56"
-              />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="form-input h-9 px-3 py-0 text-xs"
+                />
+                <span className="text-xs text-muted">to</span>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="form-input h-9 px-3 py-0 text-xs"
+                />
+              </div>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full rounded-xl border border-border bg-input py-2 pl-9 pr-4 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 sm:w-56"
+                />
+              </div>
             </div>
           </div>
 
           {filteredExpenses.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border p-10 text-center">
               <TrendingDown className="mx-auto mb-3 h-10 w-10 text-muted" />
-              <p className="text-muted">No transactions yet.</p>
+              <p className="text-muted">No transactions found.</p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-              <table className="min-w-full divide-y divide-border">
-                <thead className="bg-input/50">
-                  <tr>
-                    <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted">
-                      Description
-                    </th>
-                    <th className="hidden px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted sm:table-cell">
-                      Category
-                    </th>
-                    <th className="hidden px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted md:table-cell">
-                      Bank
-                    </th>
-                    <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted">
-                      Date
-                    </th>
-                    <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider text-muted">
-                      Amount
-                    </th>
-                    <th className="px-4 py-2.5"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {filteredExpenses.map((expense) => {
-                    const bank = bankMap.get(expense.bankId);
-                    return (
-                      <tr
-                        key={expense.id}
-                        className="group transition-colors hover:bg-input/40"
-                      >
-                        <td className="px-4 py-3">
-                          <p className="text-sm font-medium text-card-foreground">
-                            {expense.description}
-                          </p>
-                          <span className="mt-0.5 inline-flex rounded-full bg-input px-2 py-0.5 text-xs font-medium text-muted sm:hidden">
-                            {expense.category}
-                          </span>
-                        </td>
-                        <td className="hidden px-4 py-3 sm:table-cell">
-                          <span className="inline-flex rounded-full bg-input px-2 py-0.5 text-xs font-medium text-muted">
-                            {expense.category}
-                          </span>
-                        </td>
-                        <td className="hidden px-4 py-3 text-sm text-muted md:table-cell">
-                          {bank ? bank.name : "Deleted bank"}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-muted">
-                          {formatDate(expense.date)}
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm font-semibold text-danger">
-                          -{formatCurrency(expense.amount)}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <button
-                            onClick={() => handleDeleteExpense(expense.id)}
-                            className="inline-flex items-center justify-center rounded-lg p-2 text-muted opacity-100 transition-colors hover:bg-danger/10 hover:text-danger sm:opacity-0 sm:group-hover:opacity-100"
-                            aria-label="Delete expense"
+            <div className="space-y-4">
+              {groupedExpenses.map(([date, group]) => (
+                <div
+                  key={date}
+                  className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
+                >
+                  <div className="flex items-center justify-between bg-input/50 px-4 py-2.5">
+                    <h3 className="text-sm font-semibold text-foreground">
+                      {formatDate(date)}
+                    </h3>
+                    <span className="text-sm font-medium text-danger">
+                      -{formatCurrency(group.reduce((s, e) => s + e.amount, 0))}
+                    </span>
+                  </div>
+                  <table className="min-w-full divide-y divide-border">
+                    <tbody className="divide-y divide-border">
+                      {group.map((expense) => {
+                        const bank = bankMap.get(expense.bankId);
+                        return (
+                          <tr
+                            key={expense.id}
+                            className="group transition-colors hover:bg-input/40"
                           >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                            <td className="px-4 py-3">
+                              <p className="text-sm font-medium text-card-foreground">
+                                {expense.description}
+                              </p>
+                              <span className="mt-0.5 inline-flex rounded-full bg-input px-2 py-0.5 text-xs font-medium text-muted sm:hidden">
+                                {expense.category}
+                              </span>
+                            </td>
+                            <td className="hidden px-4 py-3 sm:table-cell">
+                              <span className="inline-flex rounded-full bg-input px-2 py-0.5 text-xs font-medium text-muted">
+                                {expense.category}
+                              </span>
+                            </td>
+                            <td className="hidden px-4 py-3 text-sm text-muted md:table-cell">
+                              {bank ? bank.name : "Deleted bank"}
+                            </td>
+                            <td className="px-4 py-3 text-right text-sm font-semibold text-danger">
+                              -{formatCurrency(expense.amount)}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <button
+                                onClick={() => handleDeleteExpense(expense.id)}
+                                className="inline-flex items-center justify-center rounded-lg p-2 text-muted opacity-100 transition-colors hover:bg-danger/10 hover:text-danger sm:opacity-0 sm:group-hover:opacity-100"
+                                aria-label="Delete expense"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
             </div>
           )}
         </section>
