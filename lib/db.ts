@@ -10,14 +10,20 @@ export async function initDb() {
   await sql`
     CREATE TABLE IF NOT EXISTS banks (
       id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       balance NUMERIC(12, 2) NOT NULL DEFAULT 0
     );
   `;
 
   await sql`
+    ALTER TABLE banks ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id) ON DELETE CASCADE;
+  `;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS expenses (
       id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
       bank_id TEXT NOT NULL REFERENCES banks(id) ON DELETE CASCADE,
       amount NUMERIC(12, 2) NOT NULL,
       category TEXT NOT NULL,
@@ -28,21 +34,33 @@ export async function initDb() {
   `;
 
   await sql`
-    CREATE TABLE IF NOT EXISTS app_settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
+    ALTER TABLE expenses ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id) ON DELETE CASCADE;
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      code TEXT NOT NULL UNIQUE,
+      email TEXT NOT NULL,
+      name TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `;
 
   await sql`
     CREATE TABLE IF NOT EXISTS deposits (
       id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
       bank_id TEXT NOT NULL REFERENCES banks(id) ON DELETE CASCADE,
       amount NUMERIC(12, 2) NOT NULL,
       note TEXT,
       date DATE NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+  `;
+
+  await sql`
+    ALTER TABLE deposits ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id) ON DELETE CASCADE;
   `;
 }
 

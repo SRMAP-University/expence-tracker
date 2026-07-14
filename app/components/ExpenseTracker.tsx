@@ -34,7 +34,7 @@ import {
   YAxis,
 } from "recharts";
 import {
-  initAuth,
+  setupDatabase,
   getBanks,
   getExpenses,
   addBank as addBankAction,
@@ -43,9 +43,12 @@ import {
   addMoney as addMoneyAction,
   addExpense as addExpenseAction,
   deleteExpense as deleteExpenseAction,
-  verifyPassword,
+  login,
+  createUser,
+  getUserByEmail,
   getBankHistory,
   type BankHistoryItem,
+  type User,
 } from "@/app/actions";
 
 export interface Bank {
@@ -115,7 +118,16 @@ export default function ExpenseTracker() {
 
   // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [passwordInput, setPasswordInput] = useState("");
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authTab, setAuthTab] = useState<"login" | "create" | "recover">(
+    "login"
+  );
+  const [loginCode, setLoginCode] = useState("");
+  const [createCode, setCreateCode] = useState("");
+  const [createEmail, setCreateEmail] = useState("");
+  const [createName, setCreateName] = useState("");
+  const [recoverEmail, setRecoverEmail] = useState("");
+  const [recoveredCode, setRecoveredCode] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
 
   // Modal state
@@ -158,9 +170,12 @@ export default function ExpenseTracker() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
-  async function loadData() {
+  async function loadData(userId: string) {
     try {
-      const [b, e] = await Promise.all([getBanks(), getExpenses()]);
+      const [b, e] = await Promise.all([
+        getBanks(userId),
+        getExpenses(userId),
+      ]);
       setBanks(b);
       setExpenses(e);
     } catch (err) {
@@ -171,14 +186,17 @@ export default function ExpenseTracker() {
     }
   }
 
-  const AUTH_KEY = "expense-tracker-auth";
+  const AUTH_USER_KEY = "expense-tracker-user";
 
   async function initApp() {
     try {
-      const { needsPassword } = await initAuth();
-      if (!needsPassword || localStorage.getItem(AUTH_KEY) === "true") {
+      await setupDatabase();
+      const saved = localStorage.getItem(AUTH_USER_KEY);
+      if (saved) {
+        const user = JSON.parse(saved) as User;
+        setCurrentUser(user);
         setIsAuthenticated(true);
-        await loadData();
+        await loadData(user.id);
       }
     } catch (err) {
       console.error("Failed to initialize app:", err);
@@ -219,6 +237,95 @@ export default function ExpenseTracker() {
     [totalBalance, totalExpenses]
   );
 
+  function completeLogin(user: User) {
+    setCurrentUser(user);
+    setIsAuthenticated(true);
+    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+    loadData(user.id);
+  }
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setAuthError(null);
+    try {
+      const user = await login(loginCode);
+      if (user) {
+        completeLogin(user);
+        setLoginCode("");
+      } else {
+        setAuthError("Code not found. Please check or create an account.");
+      }
+    } catch (err) {
+      console.error("Login failed:", err);
+      setAuthError("Could not log in. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleCreateAccount(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setAuthError(null);
+    const code = createCode.trim();
+    const email = createEmail.trim();
+    const name = createName.trim();
+    if (!code || !email) {
+      setAuthError("Code and email are required.");
+      setLoading(false);
+      return;
+    }
+    try {
+      const user = await createUser(code, email, name || code);
+      if (user) {
+        completeLogin(user);
+        setCreateCode("");
+        setCreateEmail("");
+        setCreateName("");
+      } else {
+        setAuthError("That code is already taken. Try another.");
+      }
+    } catch (err) {
+      console.error("Create account failed:", err);
+      setAuthError("Could not create account. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRecover(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setAuthError(null);
+    setRecoveredCode(null);
+    const email = recoverEmail.trim();
+    if (!email) {
+      setAuthError("Please enter your email.");
+      setLoading(false);
+      return;
+    }
+    try {
+      const user = await getUserByEmail(email);
+      if (user) {
+        setRecoveredCode(user.code);
+      } else {
+        setAuthError("No account found with that email.");
+      }
+    } catch (err) {
+      console.error("Recover failed:", err);
+      setAuthError("Could not recover account. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleLogout() {
+    setIsAuthenticated(false);
+    setCurrentUser(null);
+    localStorage.removeItem(AUTH_USER_KEY);
+  }
+
   function openModal(tab: "expense" | "money" | "bank") {
     if (tab !== "bank") setEditingBankId(null);
     setModalTab(tab);
@@ -242,29 +349,9 @@ export default function ExpenseTracker() {
     setBankBalance("");
   }
 
-  async function handleUnlock(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setAuthError(null);
-    try {
-      const valid = await verifyPassword(passwordInput);
-      if (valid) {
-        setIsAuthenticated(true);
-        localStorage.setItem(AUTH_KEY, "true");
-        await loadData();
-      } else {
-        setAuthError("Incorrect password");
-      }
-    } catch (err) {
-      console.error("Unlock failed:", err);
-      setAuthError("Could not verify password. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function handleBankSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!currentUser) return;
     const name = bankName.trim();
     const balance = parseFloat(bankBalance);
     if (!name || Number.isNaN(balance)) return;
@@ -272,13 +359,13 @@ export default function ExpenseTracker() {
     setLoading(true);
     try {
       if (editingBankId) {
-        await updateBankAction(editingBankId, name, balance);
+        await updateBankAction(editingBankId, name, balance, currentUser.id);
       } else {
-        const newBank = await addBankAction(name, balance);
+        const newBank = await addBankAction(name, balance, currentUser.id);
         setMoneyBankId(newBank.id);
         setExpenseBankId(newBank.id);
       }
-      await loadData();
+      await loadData(currentUser.id);
       setBankName("");
       setBankBalance("");
       setEditingBankId(null);
@@ -289,12 +376,13 @@ export default function ExpenseTracker() {
   }
 
   async function handleDeleteBank(id: string) {
+    if (!currentUser) return;
     if (!window.confirm("Delete this bank and all its expenses?")) return;
     setLoading(true);
     try {
-      await deleteBankAction(id);
+      await deleteBankAction(id, currentUser.id);
       if (filterBankId === id) setFilterBankId(null);
-      await loadData();
+      await loadData(currentUser.id);
     } finally {
       setLoading(false);
     }
@@ -302,13 +390,20 @@ export default function ExpenseTracker() {
 
   async function handleAddMoney(e: React.FormEvent) {
     e.preventDefault();
+    if (!currentUser) return;
     const amount = parseFloat(moneyAmount);
     if (Number.isNaN(amount) || amount <= 0 || !moneyBankId) return;
 
     setLoading(true);
     try {
-      await addMoneyAction(moneyBankId, amount, moneyNote, moneyDate);
-      await loadData();
+      await addMoneyAction(
+        moneyBankId,
+        amount,
+        moneyNote,
+        moneyDate,
+        currentUser.id
+      );
+      await loadData(currentUser.id);
       setMoneyAmount("");
       setMoneyNote("");
       setMoneyDate(new Date().toISOString().split("T")[0]);
@@ -319,16 +414,22 @@ export default function ExpenseTracker() {
   }
 
   async function openHistory(bankId: string) {
+    if (!currentUser) return;
     setHistoryBankId(bankId);
     setHistoryDateFrom("");
     setHistoryDateTo("");
-    await loadHistory(bankId);
+    await loadHistory(bankId, currentUser.id);
   }
 
-  async function loadHistory(bankId: string, from?: string, to?: string) {
+  async function loadHistory(
+    bankId: string,
+    userId: string,
+    from?: string,
+    to?: string
+  ) {
     setLoading(true);
     try {
-      const items = await getBankHistory(bankId, from, to);
+      const items = await getBankHistory(bankId, userId, from, to);
       setHistoryItems(items);
     } catch (err) {
       console.error("Failed to load bank history:", err);
@@ -344,6 +445,7 @@ export default function ExpenseTracker() {
 
   async function handleAddExpense(e: React.FormEvent) {
     e.preventDefault();
+    if (!currentUser) return;
     const description = expenseDescription.trim();
     const amount = parseFloat(expenseAmount);
     if (!description || Number.isNaN(amount) || amount <= 0 || !expenseBankId)
@@ -367,8 +469,8 @@ export default function ExpenseTracker() {
         date: expenseDate,
         createdAt: new Date().toISOString(),
       };
-      await addExpenseAction(expense);
-      await loadData();
+      await addExpenseAction(expense, currentUser.id);
+      await loadData(currentUser.id);
       setExpenseDescription("");
       setExpenseAmount("");
       closeModal();
@@ -378,14 +480,15 @@ export default function ExpenseTracker() {
   }
 
   async function handleDeleteExpense(id: string) {
+    if (!currentUser) return;
     const expense = expenses.find((e) => e.id === id);
     if (!expense) return;
     if (!window.confirm("Delete this expense?")) return;
 
     setLoading(true);
     try {
-      await deleteExpenseAction(id, expense.bankId, expense.amount);
-      await loadData();
+      await deleteExpenseAction(id, expense.bankId, expense.amount, currentUser.id);
+      await loadData(currentUser.id);
     } finally {
       setLoading(false);
     }
@@ -440,35 +543,158 @@ export default function ExpenseTracker() {
               Expense Tracker
             </h1>
             <p className="mt-1 text-sm text-muted">
-              Enter the password to continue
+              Sign in or create an account
             </p>
           </div>
 
-          <form onSubmit={handleUnlock} className="space-y-4">
-            <input
-              type="password"
-              placeholder="Password"
-              value={passwordInput}
-              onChange={(e) => setPasswordInput(e.target.value)}
-              className="form-input"
-              autoFocus
-            />
-            {authError && (
-              <p className="text-center text-sm text-danger">{authError}</p>
-            )}
+          <div className="mb-6 flex rounded-xl bg-input p-1">
             <button
-              type="submit"
-              disabled={!passwordInput || loading}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-foreground px-4 py-3 text-sm font-medium text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => {
+                setAuthTab("login");
+                setAuthError(null);
+                setRecoveredCode(null);
+              }}
+              className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
+                authTab === "login"
+                  ? "bg-foreground text-background"
+                  : "text-muted hover:text-foreground"
+              }`}
             >
-              {loading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Lock className="h-4 w-4" />
-              )}
-              Unlock
+              Login
             </button>
-          </form>
+            <button
+              onClick={() => {
+                setAuthTab("create");
+                setAuthError(null);
+                setRecoveredCode(null);
+              }}
+              className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
+                authTab === "create"
+                  ? "bg-foreground text-background"
+                  : "text-muted hover:text-foreground"
+              }`}
+            >
+              Create
+            </button>
+            <button
+              onClick={() => {
+                setAuthTab("recover");
+                setAuthError(null);
+                setRecoveredCode(null);
+              }}
+              className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
+                authTab === "recover"
+                  ? "bg-foreground text-background"
+                  : "text-muted hover:text-foreground"
+              }`}
+            >
+              Forgot
+            </button>
+          </div>
+
+          {authTab === "login" && (
+            <form onSubmit={handleLogin} className="space-y-4">
+              <input
+                type="text"
+                placeholder="Your code"
+                value={loginCode}
+                onChange={(e) => setLoginCode(e.target.value)}
+                className="form-input"
+                autoFocus
+              />
+              {authError && (
+                <p className="text-center text-sm text-danger">{authError}</p>
+              )}
+              <button
+                type="submit"
+                disabled={!loginCode || loading}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-foreground px-4 py-3 text-sm font-medium text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Lock className="h-4 w-4" />
+                )}
+                Login
+              </button>
+            </form>
+          )}
+
+          {authTab === "create" && (
+            <form onSubmit={handleCreateAccount} className="space-y-4">
+              <input
+                type="text"
+                placeholder="Choose a login code"
+                value={createCode}
+                onChange={(e) => setCreateCode(e.target.value)}
+                className="form-input"
+              />
+              <input
+                type="email"
+                placeholder="Email (for recovery)"
+                value={createEmail}
+                onChange={(e) => setCreateEmail(e.target.value)}
+                className="form-input"
+              />
+              <input
+                type="text"
+                placeholder="Your name (optional)"
+                value={createName}
+                onChange={(e) => setCreateName(e.target.value)}
+                className="form-input"
+              />
+              {authError && (
+                <p className="text-center text-sm text-danger">{authError}</p>
+              )}
+              <button
+                type="submit"
+                disabled={!createCode || !createEmail || loading}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-foreground px-4 py-3 text-sm font-medium text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
+                Create Account
+              </button>
+            </form>
+          )}
+
+          {authTab === "recover" && (
+            <form onSubmit={handleRecover} className="space-y-4">
+              <input
+                type="email"
+                placeholder="Enter your email"
+                value={recoverEmail}
+                onChange={(e) => setRecoverEmail(e.target.value)}
+                className="form-input"
+              />
+              {recoveredCode && (
+                <div className="rounded-xl bg-success/10 p-3 text-center">
+                  <p className="text-sm text-success">Your code is:</p>
+                  <p className="mt-1 text-lg font-semibold text-success">
+                    {recoveredCode}
+                  </p>
+                </div>
+              )}
+              {authError && (
+                <p className="text-center text-sm text-danger">{authError}</p>
+              )}
+              <button
+                type="submit"
+                disabled={!recoverEmail || loading}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-foreground px-4 py-3 text-sm font-medium text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Lock className="h-4 w-4" />
+                )}
+                Find Code
+              </button>
+            </form>
+          )}
         </div>
       </div>
     );
@@ -499,6 +725,19 @@ export default function ExpenseTracker() {
                 day: "numeric",
               })}
             </p>
+          </div>
+          <div className="flex items-center gap-3">
+            {currentUser && (
+              <p className="hidden text-sm text-muted sm:block">
+                Hi, {currentUser.name || currentUser.email}
+              </p>
+            )}
+            <button
+              onClick={handleLogout}
+              className="rounded-xl border border-border px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-input hover:text-foreground"
+            >
+              Log out
+            </button>
           </div>
         </header>
 
@@ -1038,9 +1277,10 @@ export default function ExpenseTracker() {
                 value={historyDateFrom}
                 onChange={(e) => {
                   setHistoryDateFrom(e.target.value);
-                  if (historyBankId) {
+                  if (historyBankId && currentUser) {
                     loadHistory(
                       historyBankId,
+                      currentUser.id,
                       e.target.value,
                       historyDateTo
                     );
@@ -1054,9 +1294,10 @@ export default function ExpenseTracker() {
                 value={historyDateTo}
                 onChange={(e) => {
                   setHistoryDateTo(e.target.value);
-                  if (historyBankId) {
+                  if (historyBankId && currentUser) {
                     loadHistory(
                       historyBankId,
+                      currentUser.id,
                       historyDateFrom,
                       e.target.value
                     );
