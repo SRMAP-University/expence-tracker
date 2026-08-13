@@ -1,7 +1,7 @@
 "use server";
 
 import { initDb, sql } from "@/lib/db";
-import type { Bank, Expense } from "./components/ExpenseTracker";
+import type { Bank, Expense, Loan } from "./components/ExpenseTracker";
 
 export interface User {
   id: string;
@@ -268,4 +268,123 @@ export async function deleteExpense(
     UPDATE banks SET balance = balance + ${amount}
     WHERE id = ${bankId} AND user_id = ${userId}
   `;
+}
+
+export async function getLoans(userId: string): Promise<Loan[]> {
+  const rows = (await sql`
+    SELECT id, name, amount, balance_remaining, interest_rate, due_date
+    FROM loans WHERE user_id = ${userId} ORDER BY name
+  `) as {
+    id: string;
+    name: string;
+    amount: number;
+    balance_remaining: number;
+    interest_rate: number | null;
+    due_date: string | null;
+  }[];
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    amount: Number(r.amount),
+    balanceRemaining: Number(r.balance_remaining),
+    interestRate: r.interest_rate === null ? null : Number(r.interest_rate),
+    dueDate: r.due_date,
+  }));
+}
+
+export async function addLoan(
+  name: string,
+  amount: number,
+  balanceRemaining: number,
+  interestRate: number | null,
+  dueDate: string | null,
+  userId: string
+): Promise<Loan> {
+  const id = Math.random().toString(36).slice(2, 10);
+  await sql`
+    INSERT INTO loans (id, user_id, name, amount, balance_remaining, interest_rate, due_date)
+    VALUES (${id}, ${userId}, ${name}, ${amount}, ${balanceRemaining}, ${interestRate}, ${dueDate})
+  `;
+  return {
+    id,
+    name,
+    amount,
+    balanceRemaining,
+    interestRate,
+    dueDate,
+  };
+}
+
+export async function updateLoan(
+  id: string,
+  name: string,
+  amount: number,
+  balanceRemaining: number,
+  interestRate: number | null,
+  dueDate: string | null,
+  userId: string
+): Promise<void> {
+  await sql`
+    UPDATE loans
+    SET name = ${name}, amount = ${amount}, balance_remaining = ${balanceRemaining}, interest_rate = ${interestRate}, due_date = ${dueDate}
+    WHERE id = ${id} AND user_id = ${userId}
+  `;
+}
+
+export async function deleteLoan(id: string, userId: string): Promise<void> {
+  await sql`DELETE FROM loans WHERE id = ${id} AND user_id = ${userId}`;
+}
+
+export interface PlannerItem {
+  id: string;
+  name: string;
+  amount: number;
+}
+
+export async function getPlannerData(userId: string): Promise<{
+  income: number;
+  items: PlannerItem[];
+}> {
+  const incomeRows = (await sql`
+    SELECT amount FROM planner_income WHERE user_id = ${userId}
+  `) as { amount: number }[];
+
+  const itemRows = (await sql`
+    SELECT id, name, amount FROM planner_items
+    WHERE user_id = ${userId}
+    ORDER BY sort_order, created_at
+  `) as { id: string; name: string; amount: number }[];
+
+  return {
+    income: incomeRows.length > 0 ? Number(incomeRows[0].amount) : 0,
+    items: itemRows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      amount: Number(r.amount),
+    })),
+  };
+}
+
+export async function savePlannerData(
+  userId: string,
+  income: number,
+  items: PlannerItem[]
+): Promise<void> {
+  await sql`
+    INSERT INTO planner_income (user_id, amount)
+    VALUES (${userId}, ${income})
+    ON CONFLICT (user_id)
+    DO UPDATE SET amount = EXCLUDED.amount
+  `;
+
+  await sql`DELETE FROM planner_items WHERE user_id = ${userId}`;
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const id = item.id || Math.random().toString(36).slice(2, 10);
+    await sql`
+      INSERT INTO planner_items (id, user_id, name, amount, sort_order)
+      VALUES (${id}, ${userId}, ${item.name}, ${item.amount}, ${i})
+    `;
+  }
 }

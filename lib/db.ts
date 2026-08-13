@@ -8,6 +8,16 @@ export const sql = neon(process.env.DATABASE_URL);
 
 export async function initDb() {
   await sql`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      code TEXT NOT NULL UNIQUE,
+      email TEXT NOT NULL,
+      name TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS banks (
       id TEXT PRIMARY KEY,
       user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
@@ -38,16 +48,6 @@ export async function initDb() {
   `;
 
   await sql`
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      code TEXT NOT NULL UNIQUE,
-      email TEXT NOT NULL,
-      name TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `;
-
-  await sql`
     CREATE TABLE IF NOT EXISTS deposits (
       id TEXT PRIMARY KEY,
       user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
@@ -61,6 +61,41 @@ export async function initDb() {
 
   await sql`
     ALTER TABLE deposits ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id) ON DELETE CASCADE;
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS loans (
+      id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      amount NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      balance_remaining NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      interest_rate NUMERIC(5, 2) DEFAULT NULL,
+      due_date DATE DEFAULT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `;
+
+  await sql`
+    ALTER TABLE loans ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id) ON DELETE CASCADE;
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS planner_income (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      amount NUMERIC(12, 2) NOT NULL DEFAULT 0
+    );
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS planner_items (
+      id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      amount NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
   `;
 }
 

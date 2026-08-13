@@ -6,6 +6,7 @@ import {
   ArrowUpRight,
   Banknote,
   Building2,
+  Calculator,
   Check,
   CreditCard,
   History,
@@ -20,11 +21,13 @@ import {
   Wallet,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import {
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   Legend,
   Pie,
   PieChart,
@@ -43,6 +46,10 @@ import {
   addMoney as addMoneyAction,
   addExpense as addExpenseAction,
   deleteExpense as deleteExpenseAction,
+  addLoan as addLoanAction,
+  updateLoan as updateLoanAction,
+  deleteLoan as deleteLoanAction,
+  getLoans,
   login,
   createUser,
   getUserByEmail,
@@ -65,6 +72,15 @@ export interface Expense {
   description: string;
   date: string;
   createdAt: string;
+}
+
+export interface Loan {
+  id: string;
+  name: string;
+  amount: number;
+  balanceRemaining: number;
+  interestRate: number | null;
+  dueDate: string | null;
 }
 
 const CATEGORIES = [
@@ -115,6 +131,7 @@ export default function ExpenseTracker() {
   const [loading, setLoading] = useState(true);
   const [banks, setBanks] = useState<Bank[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [loans, setLoans] = useState<Loan[]>([]);
 
   // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -132,9 +149,9 @@ export default function ExpenseTracker() {
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
-  const [modalTab, setModalTab] = useState<"expense" | "money" | "bank">(
-    "expense"
-  );
+  const [modalTab, setModalTab] = useState<
+    "expense" | "money" | "bank" | "loan"
+  >("expense");
   const [editingBankId, setEditingBankId] = useState<string | null>(null);
 
   // Bank history state
@@ -164,6 +181,14 @@ export default function ExpenseTracker() {
     new Date().toISOString().split("T")[0]
   );
 
+  // Loan form
+  const [loanName, setLoanName] = useState("");
+  const [loanAmount, setLoanAmount] = useState("");
+  const [loanBalanceRemaining, setLoanBalanceRemaining] = useState("");
+  const [loanInterestRate, setLoanInterestRate] = useState("");
+  const [loanDueDate, setLoanDueDate] = useState("");
+  const [editingLoanId, setEditingLoanId] = useState<string | null>(null);
+
   // Filter states
   const [searchQuery, setSearchQuery] = useState("");
   const [filterBankId, setFilterBankId] = useState<string | null>(null);
@@ -172,12 +197,14 @@ export default function ExpenseTracker() {
 
   async function loadData(userId: string) {
     try {
-      const [b, e] = await Promise.all([
+      const [b, e, l] = await Promise.all([
         getBanks(userId),
         getExpenses(userId),
+        getLoans(userId),
       ]);
       setBanks(b);
       setExpenses(e);
+      setLoans(l);
     } catch (err) {
       console.error("Failed to load data:", err);
       window.alert("Could not load data. Please check your database connection.");
@@ -326,8 +353,9 @@ export default function ExpenseTracker() {
     localStorage.removeItem(AUTH_USER_KEY);
   }
 
-  function openModal(tab: "expense" | "money" | "bank") {
+  function openModal(tab: "expense" | "money" | "bank" | "loan") {
     if (tab !== "bank") setEditingBankId(null);
+    if (tab !== "loan") setEditingLoanId(null);
     setModalTab(tab);
     setShowModal(true);
   }
@@ -347,6 +375,12 @@ export default function ExpenseTracker() {
     setEditingBankId(null);
     setBankName("");
     setBankBalance("");
+    setEditingLoanId(null);
+    setLoanName("");
+    setLoanAmount("");
+    setLoanBalanceRemaining("");
+    setLoanInterestRate("");
+    setLoanDueDate("");
   }
 
   async function handleBankSubmit(e: React.FormEvent) {
@@ -382,6 +416,81 @@ export default function ExpenseTracker() {
     try {
       await deleteBankAction(id, currentUser.id);
       if (filterBankId === id) setFilterBankId(null);
+      await loadData(currentUser.id);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleLoanSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!currentUser) return;
+    const name = loanName.trim();
+    const amount = parseFloat(loanAmount);
+    const balanceRemaining = parseFloat(loanBalanceRemaining);
+    const interestRate = loanInterestRate
+      ? parseFloat(loanInterestRate)
+      : null;
+    const dueDate = loanDueDate || null;
+    if (
+      !name ||
+      Number.isNaN(amount) ||
+      amount <= 0 ||
+      Number.isNaN(balanceRemaining) ||
+      balanceRemaining < 0
+    )
+      return;
+
+    setLoading(true);
+    try {
+      if (editingLoanId) {
+        await updateLoanAction(
+          editingLoanId,
+          name,
+          amount,
+          balanceRemaining,
+          interestRate,
+          dueDate,
+          currentUser.id
+        );
+      } else {
+        await addLoanAction(
+          name,
+          amount,
+          balanceRemaining,
+          interestRate,
+          dueDate,
+          currentUser.id
+        );
+      }
+      await loadData(currentUser.id);
+      closeModal();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function startEditLoan(id: string) {
+    const loan = loans.find((l) => l.id === id);
+    if (!loan) return;
+    setEditingLoanId(id);
+    setLoanName(loan.name);
+    setLoanAmount(loan.amount.toString());
+    setLoanBalanceRemaining(loan.balanceRemaining.toString());
+    setLoanInterestRate(
+      loan.interestRate === null ? "" : loan.interestRate.toString()
+    );
+    setLoanDueDate(loan.dueDate ?? "");
+    setModalTab("loan");
+    setShowModal(true);
+  }
+
+  async function handleDeleteLoan(id: string) {
+    if (!currentUser) return;
+    if (!window.confirm("Delete this loan account?")) return;
+    setLoading(true);
+    try {
+      await deleteLoanAction(id, currentUser.id);
       await loadData(currentUser.id);
     } finally {
       setLoading(false);
@@ -713,22 +822,29 @@ export default function ExpenseTracker() {
 
       <div className="mx-auto max-w-6xl">
         {/* Header */}
-        <header className="mb-6 flex items-end justify-between">
+        <header className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-              Expense Tracker
-            </h1>
-            <p className="mt-0.5 text-sm text-muted">
+            <p className="text-xs font-medium text-accent">
               {new Date().toLocaleDateString("en-US", {
                 weekday: "long",
                 month: "long",
                 day: "numeric",
               })}
             </p>
+            <h1 className="text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-2xl">
+              Expense Tracker
+            </h1>
           </div>
           <div className="flex items-center gap-3">
+            <Link
+              href="/planner"
+              className="flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-input hover:text-foreground"
+            >
+              <Calculator className="h-4 w-4" />
+              <span className="hidden sm:inline">Planner</span>
+            </Link>
             {currentUser && (
-              <p className="hidden text-sm text-muted sm:block">
+              <p className="hidden text-sm text-muted md:block">
                 Hi, {currentUser.name || currentUser.email}
               </p>
             )}
@@ -869,6 +985,128 @@ export default function ExpenseTracker() {
                 </div>
                 <span className="text-sm font-medium">Add Bank</span>
               </button>
+            </div>
+          )}
+        </section>
+
+        {/* Loans */}
+        <section className="mb-6">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-base font-semibold text-foreground">
+              Loans
+            </h2>
+            <button
+              onClick={() => {
+                setEditingLoanId(null);
+                setLoanName("");
+                setLoanAmount("");
+                setLoanBalanceRemaining("");
+                setLoanInterestRate("");
+                setLoanDueDate("");
+                openModal("loan");
+              }}
+              className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:bg-input hover:text-foreground"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add Loan
+            </button>
+          </div>
+
+          {loans.length === 0 ? (
+            <button
+              onClick={() => {
+                setEditingLoanId(null);
+                setLoanName("");
+                setLoanAmount("");
+                setLoanBalanceRemaining("");
+                setLoanInterestRate("");
+                setLoanDueDate("");
+                openModal("loan");
+              }}
+              className="w-full rounded-2xl border border-dashed border-border p-6 text-center transition-colors hover:bg-input/40"
+            >
+              <CreditCard className="mx-auto mb-2 h-8 w-8 text-muted" />
+              <p className="text-sm text-muted">Add your first loan</p>
+            </button>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {loans.map((loan) => {
+                const progress =
+                  loan.amount > 0
+                    ? Math.min(
+                        100,
+                        Math.round(
+                          ((loan.amount - loan.balanceRemaining) /
+                            loan.amount) *
+                            100
+                        )
+                      )
+                    : 0;
+                return (
+                  <div
+                    key={loan.id}
+                    className="group relative rounded-2xl border border-border bg-card p-3 transition-all hover:-translate-y-0.5 hover:shadow-md"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-input text-danger">
+                          <CreditCard className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-card-foreground">
+                            {loan.name}
+                          </p>
+                          <p className="text-sm font-semibold text-foreground">
+                            {formatCurrency(loan.balanceRemaining)} remaining
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-0.5">
+                        <button
+                          onClick={() => startEditLoan(loan.id)}
+                          className="rounded-lg p-1.5 text-muted transition-colors hover:bg-accent/10 hover:text-accent"
+                          aria-label="Edit loan"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteLoan(loan.id)}
+                          className="rounded-lg p-1.5 text-muted transition-colors hover:bg-danger/10 hover:text-danger"
+                          aria-label="Delete loan"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="mt-3">
+                      <div className="mb-1 flex items-center justify-between text-xs text-muted">
+                        <span>{progress}% paid</span>
+                        <span>of {formatCurrency(loan.amount)}</span>
+                      </div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-input">
+                        <div
+                          className="h-full rounded-full bg-success transition-all"
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                    </div>
+                    {(loan.interestRate !== null || loan.dueDate) && (
+                      <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-muted">
+                        {loan.interestRate !== null && (
+                          <span className="rounded-md bg-input px-1.5 py-0.5">
+                            {loan.interestRate}% interest
+                          </span>
+                        )}
+                        {loan.dueDate && (
+                          <span className="rounded-md bg-input px-1.5 py-0.5">
+                            Due {new Date(loan.dueDate).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </section>
@@ -1038,6 +1276,13 @@ export default function ExpenseTracker() {
                   tone="dark"
                 >
                   Bank
+                </TabButton>
+                <TabButton
+                  active={modalTab === "loan"}
+                  onClick={() => setModalTab("loan")}
+                  tone="dark"
+                >
+                  Loan
                 </TabButton>
               </div>
               <button
@@ -1236,6 +1481,99 @@ export default function ExpenseTracker() {
                     <>
                       <Plus className="h-4 w-4" />
                       Add Bank
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+
+            {modalTab === "loan" && (
+              <form onSubmit={handleLoanSubmit} className="space-y-4">
+                {editingLoanId && (
+                  <p className="text-sm text-muted">
+                    Editing{" "}
+                    <span className="font-medium text-foreground">
+                      {loans.find((l) => l.id === editingLoanId)?.name}
+                    </span>
+                  </p>
+                )}
+                <Input label="Loan Name">
+                  <input
+                    type="text"
+                    placeholder="e.g. Business Loan"
+                    value={loanName}
+                    onChange={(e) => setLoanName(e.target.value)}
+                    className="form-input"
+                  />
+                </Input>
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    label={editingLoanId ? "Original Amount" : "Loan Amount"}
+                  >
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={loanAmount}
+                      onChange={(e) => setLoanAmount(e.target.value)}
+                      className="form-input"
+                    />
+                  </Input>
+                  <Input label="Remaining Balance">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={loanBalanceRemaining}
+                      onChange={(e) =>
+                        setLoanBalanceRemaining(e.target.value)
+                      }
+                      className="form-input"
+                    />
+                  </Input>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Input label="Interest Rate (optional)">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00%"
+                      value={loanInterestRate}
+                      onChange={(e) => setLoanInterestRate(e.target.value)}
+                      className="form-input"
+                    />
+                  </Input>
+                  <Input label="Due Date (optional)">
+                    <input
+                      type="date"
+                      value={loanDueDate}
+                      onChange={(e) => setLoanDueDate(e.target.value)}
+                      className="form-input"
+                    />
+                  </Input>
+                </div>
+                <button
+                  type="submit"
+                  disabled={
+                    !loanName.trim() ||
+                    loanAmount === "" ||
+                    loanBalanceRemaining === "" ||
+                    loading
+                  }
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-foreground px-4 py-3 text-sm font-medium text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {editingLoanId ? (
+                    <>
+                      <Check className="h-4 w-4" />
+                      Save Changes
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4" />
+                      Add Loan
                     </>
                   )}
                 </button>
@@ -1462,19 +1800,43 @@ function ChartsSection({
       .filter((d) => d.spent > 0 || d.remaining > 0);
   }, [expenses, banks]);
 
+  const totalCategory = useMemo(
+    () => categoryData.reduce((sum, d) => sum + d.value, 0),
+    [categoryData]
+  );
+
+  const [expanded, setExpanded] = useState<"pie" | "bar" | null>(null);
+
   return (
-    <section className="mb-6">
-      <div className="mb-3 flex items-center gap-2">
-        <PieChartIcon className="h-4 w-4 text-muted" />
-        <h2 className="text-base font-semibold text-foreground">Insights</h2>
+    <section className="mb-5">
+      <div className="mb-2 flex items-center gap-1.5">
+        <PieChartIcon className="h-3.5 w-3.5 text-muted" />
+        <h2 className="text-sm font-semibold text-foreground">Insights</h2>
+        {expanded && (
+          <button
+            onClick={() => setExpanded(null)}
+            className="ml-auto rounded-md px-2 py-0.5 text-[10px] font-medium text-muted transition-colors hover:bg-input hover:text-foreground"
+          >
+            Show both
+          </button>
+        )}
       </div>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-2 gap-3">
         {/* Expenses by Category */}
-        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-          <h3 className="mb-2 text-sm font-medium text-muted">
+        <div
+          onClick={() => setExpanded((prev) => (prev === "pie" ? null : "pie"))}
+          className={`cursor-pointer rounded-xl border border-border bg-card p-3 transition-all hover:border-accent/50 ${
+            expanded === "bar"
+              ? "hidden"
+              : expanded === "pie"
+                ? "col-span-2"
+                : ""
+          }`}
+        >
+          <h3 className="mb-1 text-xs font-medium text-muted">
             Expenses by Category
           </h3>
-          <div className="h-60">
+          <div className={`h-52 ${expanded === "pie" ? "h-72" : ""}`}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -1483,44 +1845,77 @@ function ChartsSection({
                   nameKey="name"
                   cx="50%"
                   cy="55%"
-                  innerRadius={50}
-                  outerRadius={80}
-                  paddingAngle={3}
+                  innerRadius={45}
+                  outerRadius={70}
+                  paddingAngle={2}
+                  animationBegin={100}
+                  animationDuration={700}
+                  label={(entry) =>
+                    `${Math.round((entry.value / totalCategory) * 100)}%`
+                  }
+                  labelLine={false}
                 >
                   {categoryData.map((_, index) => (
                     <Cell
                       key={`cell-${index}`}
                       fill={CHART_COLORS[index % CHART_COLORS.length]}
+                      stroke="var(--card)"
+                      strokeWidth={2}
                     />
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(value) =>
-                    formatCurrency(typeof value === "number" ? value : 0)
-                  }
-                  contentStyle={{
-                    borderRadius: "0.75rem",
-                    border: "1px solid var(--border)",
-                    background: "var(--card)",
-                    color: "var(--foreground)",
+                  content={({ active, payload }) => {
+                    if (!active || !payload || !payload.length) return null;
+                    const item = payload[0];
+                    const name = item.name ?? "";
+                    const value = typeof item.value === "number" ? item.value : 0;
+                    const percent =
+                      totalCategory > 0
+                        ? Math.round((value / totalCategory) * 100)
+                        : 0;
+                    return (
+                      <div className="rounded-lg border border-border bg-card px-3 py-2 shadow-sm">
+                        <p className="text-xs font-medium text-foreground">
+                          {name}
+                        </p>
+                        <p className="text-xs text-muted">
+                          {formatCurrency(value)} ({percent}%)
+                        </p>
+                      </div>
+                    );
                   }}
                 />
-                <Legend verticalAlign="top" height={36} />
+                <Legend
+                  verticalAlign="top"
+                  height={28}
+                  iconType="circle"
+                  wrapperStyle={{ fontSize: "11px", color: "var(--muted)" }}
+                />
               </PieChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         {/* Bank Usage */}
-        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-          <h3 className="mb-2 text-sm font-medium text-muted">
+        <div
+          onClick={() => setExpanded((prev) => (prev === "bar" ? null : "bar"))}
+          className={`cursor-pointer rounded-xl border border-border bg-card p-3 transition-all hover:border-accent/50 ${
+            expanded === "pie"
+              ? "hidden"
+              : expanded === "bar"
+                ? "col-span-2"
+                : ""
+          }`}
+        >
+          <h3 className="mb-1 text-xs font-medium text-muted">
             Bank Balance vs Spending
           </h3>
-          <div className="h-60">
+          <div className={`h-52 ${expanded === "bar" ? "h-72" : ""}`}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={bankData}
-                margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                margin={{ top: 14, right: 6, left: -12, bottom: 0 }}
               >
                 <CartesianGrid
                   strokeDasharray="3 3"
@@ -1529,40 +1924,81 @@ function ChartsSection({
                 />
                 <XAxis
                   dataKey="name"
-                  tick={{ fill: "var(--muted)", fontSize: 12 }}
+                  tick={{ fill: "var(--muted)", fontSize: 11 }}
                   axisLine={{ stroke: "var(--border)" }}
                   tickLine={false}
                 />
                 <YAxis
-                  tick={{ fill: "var(--muted)", fontSize: 12 }}
+                  tick={{ fill: "var(--muted)", fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                   tickFormatter={(value) => `$${value}`}
                 />
                 <Tooltip
-                  formatter={(value) =>
-                    formatCurrency(typeof value === "number" ? value : 0)
-                  }
-                  contentStyle={{
-                    borderRadius: "0.75rem",
-                    border: "1px solid var(--border)",
-                    background: "var(--card)",
-                    color: "var(--foreground)",
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload) return null;
+                    return (
+                      <div className="rounded-lg border border-border bg-card px-3 py-2 shadow-sm">
+                        <p className="mb-1 text-xs font-medium text-foreground">
+                          {label}
+                        </p>
+                        {payload.map((entry, idx) => (
+                          <p
+                            key={idx}
+                            className="text-xs text-muted"
+                            style={{ color: entry.color }}
+                          >
+                            {entry.name}: {formatCurrency(
+                              typeof entry.value === "number" ? entry.value : 0
+                            )}
+                          </p>
+                        ))}
+                      </div>
+                    );
                   }}
                 />
-                <Legend />
+                <Legend
+                  verticalAlign="top"
+                  height={20}
+                  iconType="circle"
+                  wrapperStyle={{ fontSize: "11px", color: "var(--muted)" }}
+                />
                 <Bar
                   dataKey="spent"
                   name="Spent"
                   fill="#ef4444"
                   radius={[4, 4, 0, 0]}
-                />
+                  animationDuration={700}
+                >
+                  <LabelList
+                    dataKey="spent"
+                    position="top"
+                    formatter={(value) =>
+                      typeof value === "number" && value > 0
+                        ? `$${Math.round(value)}`
+                        : ""
+                    }
+                    className="text-[10px] fill-muted"
+                  />
+                </Bar>
                 <Bar
                   dataKey="remaining"
                   name="Remaining"
                   fill="#22c55e"
                   radius={[4, 4, 0, 0]}
-                />
+                  animationDuration={700}
+                >
+                  <LabelList
+                    dataKey="remaining"
+                    position="top"
+                    formatter={(value) =>
+                      typeof value === "number" && value > 0
+                        ? `$${Math.round(value)}`
+                        : ""
+                    }
+                    className="text-[10px] fill-muted"
+                  />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
