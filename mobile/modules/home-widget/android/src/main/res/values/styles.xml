@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <style name="WidgetStatLabel">
+    <item name="android:layout_width">wrap_content</item>
+    <item name="android:layout_height">wrap_content</item>
+    <item name="android:maxLines">1</item>
+    <item name="android:ellipsize">end</item>
+    <item name="android:textColor">#A9C2BC</item>
+    <item name="android:textSize">11sp</item>
+  </style>
+
+  <style name="WidgetStatValue">
+    <item name="android:layout_width">wrap_content</item>
+    <item name="android:layout_height">wrap_content</item>
+    <item name="android:maxLines">1</item>
+    <item name="android:ellipsize">end</item>
+    <item name="android:fontFamily">sans-serif-medium</item>
+    <item name="android:textColor">#FFFFFF</item>
+    <item name="android:textSize">14sp</item>
+  </style>
+
+  <style name="WidgetRow">
+    <item name="android:layout_width">match_parent</item>
+    <item name="android:layout_height">wrap_content</item>
+    <item name="android:layout_marginTop">4dp</item>
+    <item name="android:orientation">horizontal</item>
+    <item name="android:visibility">gone</item>
+  </style>
+
+  <style name="WidgetRowLeft">
+    <item name="android:layout_width">0dp</item>
+    <item name="android:layout_height">wrap_content</item>
+    <item name="android:layout_weight">1</item>
+    <item name="android:maxLines">1</item>
+    <item name="android:ellipsize">end</item>
+    <item name="android:textColor">#FFFFFF</item>
+    <item name="android:textSize">13sp</item>
+  </style>
+
+  <style name="WidgetRowRight">
+    <item name="android:layout_width">wrap_content</item>
+    <item name="android:layout_height">wrap_content</item>
+    <item name="android:layout_marginStart">8dp</item>
+    <item name="android:maxLines">1</item>
+    <item name="android:fontFamily">sans-serif-medium</item>
+    <item name="android:textColor">#FFFFFF</item>
+    <item name="android:textSize">13sp</item>
+  </style>
+</resources>

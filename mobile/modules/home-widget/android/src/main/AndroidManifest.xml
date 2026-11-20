@@ -1,0 +1,33 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!-- The "Today's spending" Live Update: a normal notification that Android 16 can promote to a
+       status bar chip (OnePlus shows these in its Live Alerts pill). -->
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+
+  <application>
+    <receiver
+      android:name="expo.modules.homewidget.FinanceWidgetProvider"
+      android:exported="true"
+      android:label="Expense AI">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/finance_widget_info" />
+    </receiver>
+
+    <!-- Opened by the launcher's "edit widget"; hands over to the app's widget editor. -->
+    <activity
+      android:name="expo.modules.homewidget.WidgetConfigureActivity"
+      android:exported="true"
+      android:excludeFromRecents="true"
+      android:noHistory="true"
+      android:theme="@android:style/Theme.Translucent.NoTitleBar">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>

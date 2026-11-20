@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="finance_widget_description">Your spending, balance or an account at a glance. Long-press to choose what it shows.</string>
+  <string name="live_spending_channel">Today\'s spending</string>
+  <string name="live_spending_channel_description">Today\'s spending in the status bar and Live Alerts, when you turn it on in the app.</string>
+</resources>

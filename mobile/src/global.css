@@ -1,0 +1,5 @@
+/* Web only: match the app canvas so there is no white flash around the app shell. */
+html,
+body {
+  background: #eef4ec;
+}

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Open Expense AI (development build)</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        padding: 24px;
+        box-sizing: border-box;
+        font-family: system-ui, sans-serif;
+        background: #eef4ec;
+        color: #0b2b26;
+        text-align: center;
+      }
+      a.button {
+        display: inline-block;
+        padding: 16px 28px;
+        border-radius: 999px;
+        background: #0b3a33;
+        color: #fff;
+        font-weight: 700;
+        text-decoration: none;
+      }
+      a.plain {
+        color: #0b3a33;
+        font-weight: 600;
+      }
+      code {
+        word-break: break-all;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Expense AI</h1>
+    <p>Development build: loads the latest code from the PC.</p>
+    <a class="button" id="open" href="#">Open in Expense AI</a>
+    <p>Not installed yet? <a class="plain" href="expense-ai-dev.apk">Download the development APK</a> (103 MB)</p>
+    <p>
+      If the button does nothing, open the app and enter this address:<br />
+      <code id="address"></code>
+    </p>
+    <script>
+      // The dev server's own address, whatever host this page was reached through.
+      var server = location.origin;
+      document.getElementById('address').textContent = server;
+      document.getElementById('open').href =
+        'exp+expense-ai://expo-development-client/?url=' + encodeURIComponent(server);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The app pushes fresh figures whenever its data changes; the 30-minute refresh only rolls
+     "today" over at midnight. Placed without setup; long-press > edit opens the editor. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+  android:minWidth="110dp"
+  android:minHeight="110dp"
+  android:minResizeWidth="110dp"
+  android:minResizeHeight="60dp"
+  android:targetCellWidth="3"
+  android:targetCellHeight="3"
+  android:maxResizeWidth="530dp"
+  android:maxResizeHeight="300dp"
+  android:resizeMode="horizontal|vertical"
+  android:updatePeriodMillis="1800000"
+  android:initialLayout="@layout/finance_widget"
+  android:previewLayout="@layout/finance_widget"
+  android:description="@string/finance_widget_description"
+  android:configure="expo.modules.homewidget.WidgetConfigureActivity"
+  android:widgetFeatures="reconfigurable|configuration_optional"
+  android:widgetCategory="home_screen" />

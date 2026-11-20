@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Home screen widget, in the app's look. Every section is filled in (or hidden) from what the
+  app sends, so what the widget shows can change with an app update; this file only fixes the
+  slots: headline, three quick stats, a progress bar, and a list of up to four rows.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:id="@+id/widget_root"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  android:background="@drawable/widget_bg"
+  android:orientation="vertical"
+  android:paddingStart="16dp"
+  android:paddingTop="14dp"
+  android:paddingEnd="12dp"
+  android:paddingBottom="14dp">
+
+  <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="30dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <TextView
+      android:id="@+id/widget_label"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:ellipsize="end"
+      android:fontFamily="sans-serif-medium"
+      android:maxLines="1"
+      android:text="Expense AI"
+      android:textColor="#C6EA9C"
+      android:textSize="13sp" />
+
+    <ImageView
+      android:id="@+id/widget_add"
+      android:layout_width="30dp"
+      android:layout_height="30dp"
+      android:background="@drawable/widget_add_bg"
+      android:contentDescription="Add a transaction"
+      android:padding="7dp"
+      android:src="@drawable/ic_widget_add" />
+  </LinearLayout>
+
+  <TextView
+    android:id="@+id/widget_value"
+    android:layout_width="match_parent"
+    android:layout_height="40dp"
+    android:autoSizeMaxTextSize="34sp"
+    android:autoSizeMinTextSize="16sp"
+    android:autoSizeTextType="uniform"
+    android:fontFamily="sans-serif-medium"
+    android:gravity="center_vertical|start"
+    android:maxLines="1"
+    android:text="—"
+    android:textColor="#FFFFFF"
+    android:textSize="30sp" />
+
+  <!-- Quick stats -->
+  <LinearLayout
+    android:id="@+id/widget_stats"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="8dp"
+    android:orientation="horizontal"
+    android:visibility="gone">
+
+    <LinearLayout
+      android:id="@+id/stat1"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:orientation="vertical">
+      <TextView android:id="@+id/stat1_label" style="@style/WidgetStatLabel" />
+      <TextView android:id="@+id/stat1_value" style="@style/WidgetStatValue" />
+    </LinearLayout>
+
+    <LinearLayout
+      android:id="@+id/stat2"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:orientation="vertical">
+      <TextView android:id="@+id/stat2_label" style="@style/WidgetStatLabel" />
+      <TextView android:id="@+id/stat2_value" style="@style/WidgetStatValue" />
+    </LinearLayout>
+
+    <LinearLayout
+      android:id="@+id/stat3"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:orientation="vertical">
+      <TextView android:id="@+id/stat3_label" style="@style/WidgetStatLabel" />
+      <TextView android:id="@+id/stat3_value" style="@style/WidgetStatValue" />
+    </LinearLayout>
+  </LinearLayout>
+
+  <!-- Progress, e.g. share of the month's income already spent -->
+  <LinearLayout
+    android:id="@+id/widget_progress"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="10dp"
+    android:orientation="vertical"
+    android:visibility="gone">
+
+    <LinearLayout
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:orientation="horizontal">
+      <TextView
+        android:id="@+id/progress_label"
+        style="@style/WidgetStatLabel"
+        android:layout_width="0dp"
+        android:layout_weight="1" />
+      <TextView
+        android:id="@+id/progress_right"
+        style="@style/WidgetStatLabel"
+        android:textColor="#C6EA9C" />
+    </LinearLayout>
+
+    <ProgressBar
+      android:id="@+id/progress_bar"
+      style="?android:attr/progressBarStyleHorizontal"
+      android:layout_width="match_parent"
+      android:layout_height="6dp"
+      android:layout_marginTop="4dp"
+      android:max="100"
+      android:progress="0"
+      android:progressDrawable="@drawable/widget_progress" />
+  </LinearLayout>
+
+  <!-- List: recent transactions, top categories or accounts -->
+  <TextView
+    android:id="@+id/list_title"
+    style="@style/WidgetStatLabel"
+    android:layout_marginTop="10dp"
+    android:fontFamily="sans-serif-medium"
+    android:textColor="#C6EA9C"
+    android:visibility="gone" />
+
+  <LinearLayout android:id="@+id/row1" style="@style/WidgetRow">
+    <TextView android:id="@+id/row1_left" style="@style/WidgetRowLeft" />
+    <TextView android:id="@+id/row1_right" style="@style/WidgetRowRight" />
+  </LinearLayout>
+  <LinearLayout android:id="@+id/row2" style="@style/WidgetRow">
+    <TextView android:id="@+id/row2_left" style="@style/WidgetRowLeft" />
+    <TextView android:id="@+id/row2_right" style="@style/WidgetRowRight" />
+  </LinearLayout>
+  <LinearLayout android:id="@+id/row3" style="@style/WidgetRow">
+    <TextView android:id="@+id/row3_left" style="@style/WidgetRowLeft" />
+    <TextView android:id="@+id/row3_right" style="@style/WidgetRowRight" />
+  </LinearLayout>
+  <LinearLayout android:id="@+id/row4" style="@style/WidgetRow">
+    <TextView android:id="@+id/row4_left" style="@style/WidgetRowLeft" />
+    <TextView android:id="@+id/row4_right" style="@style/WidgetRowRight" />
+  </LinearLayout>
+</LinearLayout>
